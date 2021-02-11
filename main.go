@@ -19,6 +19,7 @@ func main() {
 	flag.BoolVar(&doword, "w", false, "The number of words in each input file is written to the standard output.")
 	flag.Parse()
 
+	// The default action is equivalent to specifying the -c, -l and -w options.
 	if flag.NFlag() == 0 {
 		dochar, doline, doword = true, true, true
 	}
