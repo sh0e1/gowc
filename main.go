@@ -5,19 +5,25 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"os"
 )
 
-var c, l, m, w bool
+var dochar, doline, domulti, doword bool
 
 func main() {
-	flag.BoolVar(&c, "c", false, "The number of bytes in each input file is written to the standard output.  This will cancel out any prior usage of the -m option.")
-	flag.BoolVar(&l, "l", false, "The number of lines in each input file is written to the standard output.")
-	flag.BoolVar(&m, "m", false, "The number of characters in each input file is written to the standard output.  If the current locale does not support multibyte characters, this is equivalent to the -c option.  This will cancel out any prior usage of the -c option.")
-	flag.BoolVar(&w, "w", false, "The number of words in each input file is written to the standard output.")
+	flag.BoolVar(&dochar, "c", false, "The number of bytes in each input file is written to the standard output.  This will cancel out any prior usage of the -m option.")
+	flag.BoolVar(&doline, "l", false, "The number of lines in each input file is written to the standard output.")
+	flag.BoolVar(&domulti, "m", false, "The number of characters in each input file is written to the standard output.  If the current locale does not support multibyte characters, this is equivalent to the -c option.  This will cancel out any prior usage of the -c option.")
+	flag.BoolVar(&doword, "w", false, "The number of words in each input file is written to the standard output.")
 	flag.Parse()
 
-	buf := &bytes.Buffer{}
+	if flag.NFlag() == 0 {
+		dochar, doline, doword = true, true, true
+	}
+
+	w := &bytes.Buffer{}
 	for _, arg := range flag.Args() {
 		f, err := os.Open(arg)
 		if err != nil {
@@ -27,27 +33,39 @@ func main() {
 		// nolint:errcheck
 		defer f.Close()
 
-		var sf bufio.SplitFunc
-		switch {
-		case c:
-			sf = bufio.ScanBytes
-		case l:
-			sf = bufio.ScanLines
-		case m:
-			sf = bufio.ScanRunes
-		case w:
-			sf = bufio.ScanWords
+		b, err := ioutil.ReadAll(f)
+		if err != nil {
+			fmt.Printf("gowc: %v\n", err)
+			continue
 		}
 
-		s := bufio.NewScanner(f)
-		s.Split(sf)
-
-		var cnt int
-		for s.Scan() {
-			cnt++
+		if doline {
+			fmt.Fprintf(w, "%8d", count(bytes.NewReader(b), bufio.ScanLines))
 		}
-		fmt.Fprintf(buf, "%8d %s\n", cnt, arg)
+		if doword {
+			fmt.Fprintf(w, "%8d", count(bytes.NewReader(b), bufio.ScanWords))
+		}
+		if domulti {
+			dochar = false
+			fmt.Fprintf(w, "%8d", count(bytes.NewReader(b), bufio.ScanRunes))
+		}
+		if dochar {
+			fmt.Fprintf(w, "%8d", count(bytes.NewReader(b), bufio.ScanBytes))
+		}
+
+		fmt.Fprintf(w, " %s\n", arg)
 	}
 
-	fmt.Print(buf.String())
+	fmt.Print(w.String())
+}
+
+func count(r io.Reader, sf bufio.SplitFunc) int {
+	s := bufio.NewScanner(r)
+	s.Split(sf)
+
+	var cnt int
+	for s.Scan() {
+		cnt++
+	}
+	return cnt
 }
